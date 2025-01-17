@@ -1,10 +1,18 @@
 package spot
 
-const FixTestServerAddress = "fix-oe.testnet.binance.vision:9000"
-const FixServerAddress = "fix-oe.binance.com:9000"
+const FixTestOrderServerAddress = "fix-oe.testnet.binance.vision:9000"
+const FixOrderServerAddress = "fix-oe.binance.com:9000"
+const FixMarketDataServerAddress = "fix-md.binance.com:9000"
 const FixBodyLengthPlaceHolder = "__%%BODYLENGTH%%__"
 const FixMsgSeparator = "\x01"
 const FixBeginValue = "FIX.4.4"
+
+type FixServerType string
+
+const (
+	FixServerTypeOrder      FixServerType = "order"
+	FixServerTypeMarketData FixServerType = "market-data"
+)
 
 type FixTagType string
 
@@ -112,6 +120,7 @@ const (
 	FixTagUUID                     FixTagType = "25037"
 	FixTagOrderCreationTime        FixTagType = "25018"
 	FixTagCumQuoteQty              FixTagType = "25017"
+	FixTagLastBookUpdateID         FixTagType = "25044"
 )
 
 type FixMessageType string
@@ -129,6 +138,8 @@ const (
 	FixMessageOrderStatusRequest     FixMessageType = "H"
 	FixMessageExecutionReport        FixMessageType = "8"
 	FixMessageReject                 FixMessageType = "3"
+	FixMessageMarketData             FixMessageType = "V"
+	FixMessageMarketDataResp         FixMessageType = "X"
 )
 
 func makeTagKeyValue() map[string]string {
@@ -237,6 +248,7 @@ func makeTagKeyValue() map[string]string {
 	kv["UUID"] = "25037"
 	kv["OrderCreationTime"] = "25018"
 	kv["CumQuoteQty"] = "25017"
+	kv["LastBookUpdateID"] = "25044"
 	return kv
 }
 
@@ -346,6 +358,7 @@ func flipTagKeyValue() map[string]string {
 	vk["25037"] = "UUID"
 	vk["25018"] = "OrderCreationTime"
 	vk["25017"] = "CumQuoteQty"
+	vk["25044"] = "LastBookUpdateID"
 	return vk
 }
 
@@ -362,6 +375,8 @@ func makeMessageKeyValue() map[string]string {
 	kv["OrderStatusRequest"] = "H"
 	kv["ExecutionReport"] = "8"
 	kv["Reject"] = "3"
+	kv["MarketData"] = "V"
+	kv["MarketDataResp"] = "X"
 	return kv
 }
 
@@ -378,6 +393,8 @@ func flipMessageKeyValue() map[string]string {
 	vk["H"] = "OrderStatusRequest"
 	vk["8"] = "ExecutionReport"
 	vk["3"] = "Reject"
+	vk["V"] = "MarketData"
+	vk["X"] = "MarketDataResp"
 	return vk
 }
 

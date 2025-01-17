@@ -14,6 +14,11 @@ func MakeRandomSenderID() string {
 	return id[len(id)-8:]
 }
 
+func MakeRandomReqID() string {
+	id := fmt.Sprintf("%d", time.Now().UnixMilli())
+	return id
+}
+
 func makeSendingTime() string {
 	return time.Now().UTC().Format("20060102-15:04:05.000")
 }

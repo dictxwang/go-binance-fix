@@ -84,3 +84,20 @@ type ExecutionReportMessage struct {
 	LastQty           float64 // 最后一次执行的数量。
 	OrderStatus       OrderStatus
 }
+
+type MDEntryType string
+
+const (
+	MDEntryTypeBid   MDEntryType = "0"
+	MDEntryTypeOffer MDEntryType = "1" // also called 'Ask'
+	MDEntryTypeTrade MDEntryType = "2"
+)
+
+type MarketDataMessage struct {
+	MDReqID          string
+	Symbol           string
+	LastBookUpdateID int64
+	MDEntryType      MDEntryType
+	MDEntryPx        float64
+	MDEntrySize      float64
+}

@@ -50,6 +50,7 @@ type BinanceFixClient struct {
 	rejectChan   *chan RejectMessage
 	logonChan    *chan string
 	logoutChan   *chan bool
+	tickerChan   *chan MarketDataMessage
 }
 
 func NewBinanceFixClientWithLocalIP(apiKey, secretKey, localIP string) (*BinanceFixClient, error) {
@@ -98,10 +99,14 @@ func (c *BinanceFixClient) SetLoginChannels(logonChan *chan string, logoutChan *
 	c.logoutChan = logoutChan
 }
 
-func (c *BinanceFixClient) Start(senderCompID string) error {
+func (c *BinanceFixClient) SetTickerChannel(tickerChan *chan MarketDataMessage) {
+	c.tickerChan = tickerChan
+}
+
+func (c *BinanceFixClient) Start(senderCompID string, serverType FixServerType) error {
 
 	// 创建链接
-	err, _ := c.dial()
+	err, _ := c.dial(serverType)
 	if err != nil {
 		return err
 	}
@@ -141,9 +146,51 @@ func (c *BinanceFixClient) Start(senderCompID string) error {
 	c.startHeartbeat()
 
 	c.senderCompID = senderCompID
+
 	// 发起登录
 	err = c.logon()
 	return err
+}
+
+// SubscribeBookTicker 定义ticker消息，服务端限制bid和offer必须同时订阅
+func (c *BinanceFixClient) SubscribeBookTicker(mdReqId string, symbols []string) error {
+	if len(symbols) == 0 {
+		return errors.New("require symbols")
+	}
+	if mdReqId == "" {
+		mdReqId = MakeRandomReqID()
+	}
+	header := fmt.Sprintf("%s=%s|%s=%s|", FixTagBeginString, FixBeginValue, FixTagBodyLength, FixBodyLengthPlaceHolder)
+	messageSeq := c.nextMessageSeq()
+	sendingTime := makeSendingTime()
+	senderCompID := c.senderCompID
+
+	body := fmt.Sprintf("%s=%s|%s=%s|%s=%s|%s=%s|%s=%s|%s=%s|%s=%s|%s=%s|%s=%s|%s=%s|%s=%s|%s=%s|",
+		string(FixTagMsgType), string(FixMessageMarketData),
+		string(FixTagMsgSeqNum), messageSeq,
+		string(FixTagSenderCompID), senderCompID,
+		string(FixTagSendingTime), sendingTime,
+		string(FixTagTargetCompID), "SPOT",
+		string(FixTagMDReqID), mdReqId,
+		string(FixTagSubscriptionRequestType), "1",
+		string(FixTagMarketDepth), "1",
+		string(FixTagNoMDEntryTypes), "2",
+		string(FixTagMDEntryType), MDEntryTypeBid,
+		string(FixTagMDEntryType), MDEntryTypeOffer,
+		string(FixTagNoRelatedSym), fmt.Sprintf("%d", len(symbols)),
+	)
+	for _, symbol := range symbols {
+		body += fmt.Sprintf("%s=%s|", string(FixTagSymbol), symbol)
+	}
+
+	header = strings.ReplaceAll(header, FixBodyLengthPlaceHolder, fmt.Sprintf("%d", len(body)))
+	encode := header + body
+	tail := fmt.Sprintf("%s=%s|", string(FixTagCheckSum), calCheckSum(strings.ReplaceAll(encode, "|", FixMsgSeparator)))
+
+	encode = encode + tail
+	c.send(strings.ReplaceAll(encode, "|", FixMsgSeparator))
+
+	return nil
 }
 
 func (c *BinanceFixClient) PlaceOrder(order NewOrder) error {
@@ -235,7 +282,7 @@ func (c *BinanceFixClient) CancelOrder(order CancelOrder) error {
 	return nil
 }
 
-func (c *BinanceFixClient) dial() (error, bool) {
+func (c *BinanceFixClient) dial(serverType FixServerType) (error, bool) {
 
 	if !c.closed || c.connecting {
 		return nil, true
@@ -258,10 +305,14 @@ func (c *BinanceFixClient) dial() (error, bool) {
 	}
 
 	var serverAddress string
-	if c.UseTestServer {
-		serverAddress = FixTestServerAddress
+	if serverType == FixServerTypeOrder {
+		if c.UseTestServer {
+			serverAddress = FixTestOrderServerAddress
+		} else {
+			serverAddress = FixOrderServerAddress
+		}
 	} else {
-		serverAddress = FixServerAddress
+		serverAddress = FixMarketDataServerAddress
 	}
 
 	conn, err := dialer.DialContext(ctx, "tcp", serverAddress)
@@ -328,7 +379,7 @@ func (c *BinanceFixClient) logon() error {
 
 func (c *BinanceFixClient) send(message string) {
 
-	//fmt.Printf("Send: %s\n", message)
+	fmt.Printf("Send: %s\n", message)
 	allBytes := []byte(message)
 	c.writeChan <- allBytes
 }
@@ -437,6 +488,8 @@ func (c *BinanceFixClient) startResponseParsing() {
 				}
 			} else if msgType == FixMessageExecutionReport {
 				go c.processExecutionReport(values)
+			} else if msgType == FixMessageMarketDataResp {
+				go c.processMarketData(values)
 			} else {
 				if !c.ignoreUnknownMessage && c.unknownChan != nil {
 					// 透传未知的消息体
@@ -448,6 +501,14 @@ func (c *BinanceFixClient) startResponseParsing() {
 	}()
 
 	fmt.Printf("Start Response Parsing\n")
+}
+
+func (c *BinanceFixClient) processMarketData(values map[string]string) {
+
+	if c.tickerChan != nil {
+		message := parseMarketDataMessage(values)
+		*c.tickerChan <- message
+	}
 }
 
 func (c *BinanceFixClient) processExecutionReport(values map[string]string) {
@@ -548,7 +609,7 @@ func (c *BinanceFixClient) processReject(values map[string]string) {
 		if typeName, has := c.flipMessageTypeMap[string(message.RefMsgType)]; has {
 			message.RefMsgTypeName = typeName
 		}
-		if tagName, has := c.flipTagMap[string(message.RefTagID)]; has {
+		if tagName, has := c.flipTagMap[fmt.Sprintf("%d", message.RefTagID)]; has {
 			message.RefTagName = tagName
 		}
 		if c.rejectChan != nil {

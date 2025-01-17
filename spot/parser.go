@@ -90,6 +90,26 @@ func parseLogonMessage(values map[string]string) LogonMessage {
 	return message
 }
 
+func parseMarketDataMessage(values map[string]string) MarketDataMessage {
+	message := MarketDataMessage{}
+	for k, v := range values {
+		if k == string(FixTagMDReqID) {
+			message.MDReqID = v
+		} else if k == string(FixTagSymbol) {
+			message.Symbol = v
+		} else if k == string(FixTagLastBookUpdateID) {
+			message.LastBookUpdateID, _ = strconv.ParseInt(v, 10, 64)
+		} else if k == string(FixTagMDEntryType) {
+			message.MDEntryType = MDEntryType(v)
+		} else if k == string(FixTagMDEntryPx) {
+			message.MDEntryPx, _ = strconv.ParseFloat(v, 64)
+		} else if k == string(FixTagMDEntrySize) {
+			message.MDEntrySize, _ = strconv.ParseFloat(v, 64)
+		}
+	}
+	return message
+}
+
 func parseExecutionReportMessage(values map[string]string) ExecutionReportMessage {
 	message := ExecutionReportMessage{}
 	for k, v := range values {
