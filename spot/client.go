@@ -379,7 +379,7 @@ func (c *BinanceFixClient) logon() error {
 
 func (c *BinanceFixClient) send(message string) {
 
-	fmt.Printf("Send: %s\n", message)
+	//fmt.Printf("Send: %s\n", message)
 	allBytes := []byte(message)
 	c.writeChan <- allBytes
 }
